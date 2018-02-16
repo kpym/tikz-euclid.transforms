@@ -1,0 +1,167 @@
+% Copyright 2018 by Kpym
+%
+% This file may be distributed and/or modified
+%
+% 1. under the LaTeX Project Public License and/or
+% 2. under the GNU Public License.
+%
+% ===================================================================
+%
+% Available transforms :
+%
+% ---------------------------
+% translation=A--B
+%   is the translation that with vector AB (<=> sends A to B)
+% ---------------------------
+% rotation=A--O--B
+%   is the rotation around O that sens [O,A) to [O,B) (<=> sends O to O and A to B if OA=OB)
+% ---------------------------
+% homothety=A--O--B
+%   is the homothety with center O and ratio OB:OA (<=> sends O to O and A to B if A,O,B aligned)
+% ---------------------------
+% central symmetry=A
+%   is the symmetry with center A (<=> sends A to A)
+% ---------------------------
+% projection=A--B
+%   is the orthogonal projection to (AB) (<=> sends A to A and B to B)
+% ---------------------------
+% slanted projection=A--B--C
+%   is the projection to (AB) with direction (BC) (<=> sends A to A,B to B and C to B)
+% ---------------------------
+% symmetry=A--B
+%   is the orthogonal symmetry to (AB) (<=> sends A to A and B to B)
+% ---------------------------
+% slanted symmetry=A--B--C
+%   is the symmetry with axis (AB) and direction (BC) (<=> sends A to A, B to B and C to (B!-1!C))
+%
+% ===================================================================
+%
+% How to use it (by examples) :
+%
+% you can add this transformations as styles anywhere you can use for example [rotate=20]
+%
+% ([central symmetry=A]B) coordinate(C), will construct C such that A is the middle of BC
+% ([rotation=A--O--B]C) coordinate(D), if C is on (OA) will construct D on OB such that OC=OD
+%
+% ===================================================================
+
+
+
+\typeout{tikz-euclid.transforms v1.0}
+
+% ===================================================================
+% Some tools
+% ===================================================================
+
+
+% Set (\pgf@x#1,\pgf@y#1) := (#2)
+% ------------------------------
+\def\etr@get#1#2{
+  \pgf@process{\pgfpointanchor{#2}{center}}%
+  \csname pgf@x#1\endcsname=\pgf@x%
+  \csname pgf@y#1\endcsname=\pgf@y%
+}
+% Subtract (\pgf@x#1,\pgf@y#1) from (\pgf@x#2,\pgf@y#2)
+% ------------------------------
+\def\etr@vec#1#2{
+  \advance\csname pgf@x#2\endcsname by-\csname pgf@x#1\endcsname%
+  \advance\csname pgf@y#2\endcsname by-\csname pgf@y#1\endcsname%
+}
+% and normalize (\pgf@x#1,\pgf@y#1) into (\pgf@x#2,\pgf@y#2)
+% ------------------------------
+\def\etr@nrmlz#1to#2{
+  \pgfmathatantwo{\the\csname pgf@y#1\endcsname}{\the\csname pgf@x#1\endcsname}%
+  \let\pgf@tmp=\pgfmathresult%
+  \pgfmathcos@{\pgf@tmp}\csname pgf@x#2\endcsname=\pgfmathresult pt\relax%
+  \pgfmathsin@{\pgf@tmp}\csname pgf@y#2\endcsname=\pgfmathresult pt\relax%
+}
+% Subtract (\pgf@x#1,\pgf@y#1) from (\pgf@x#2,\pgf@y#2)
+% and normalize (\pgf@x#2,\pgf@y#2)
+% ------------------------------
+\def\etr@nvec#1#2{
+  \etr@vec{#1}{#2}
+  \etr@nrmlz{#2}to{#2}
+}
+
+% ===================================================================
+% The main transforms as styles
+% ===================================================================
+
+\tikzset{
+  translation/.code args={#1--#2}{
+    % get A--B
+    \etr@get{a}{#1}\etr@get{b}{#2}
+    % the directions AB
+    \etr@vec{a}{b}
+    % the translation transform
+    \pgfkeysalso{shift={(\pgf@xb,\pgf@yb)}}%
+  },
+  rotation/.code args={#1--#2--#3}{
+    % get A--B--C
+    \etr@get{a}{#1}\etr@get{b}{#2}\etr@get{c}{#3}
+    % the directions BA and BC
+    \etr@vec{b}{a}\etr@vec{b}{c}
+    % get the arguments of BA and BC
+    \pgfmathatantwo{\the\pgf@ya}{\the\pgf@xa}%
+    \let\pgf@anglea=\pgfmathresult%
+    \pgfmathatantwo{\the\pgf@yc}{\the\pgf@xc}%
+    \let\pgf@anglec=\pgfmathresult%
+    % the homothety transform
+    \pgfkeysalso{rotate around={\pgf@anglec-\pgf@anglea:(#2)}}
+  },
+  homothety/.code args={#1--#2--#3}{
+    % get A--B--C
+    \etr@get{a}{#1}\etr@get{b}{#2}\etr@get{c}{#3}
+    % the directions BA and BC
+    \etr@vec{b}{a}\etr@vec{b}{c}
+    % normalised vector of BA is (\pgf@xb,\pgf@yb)
+    \etr@nrmlz{a}to{b}
+    % calculate the homothety ratio
+    \pgfmathsetmacro{\pgf@lambda}{(\the\pgf@xc*\the\pgf@xb+\the\pgf@yc*\the\pgf@yb)/veclen(\the\pgf@xa,\the\pgf@ya)}
+    % the homothety transform
+    \pgfkeysalso{scale around={\pgf@lambda:(#2)}}
+  },
+  central symmetry/.style={
+    scale around={-1:(#1)}
+  },
+  projection/.code args={#1--#2}{
+    % get A--B
+    \etr@get{a}{#1}\etr@get{b}{#2}
+    % the normalized directions AB
+    \etr@nvec{a}{b}
+    % the projection transform
+    \pgfkeysalso{cm={\pgf@xb*\pgf@xb,\pgf@xb*\pgf@yb,\pgf@xb*\pgf@yb,\pgf@yb*\pgf@yb,(\pgf@xa,\pgf@ya)},shift={(-\pgf@xa,-\pgf@ya)}}%
+  },
+  slanted projection/.code args={#1--#2--#3}{
+    % get A--B--C
+    \etr@get{a}{#1}\etr@get{b}{#2}\etr@get{c}{#3}
+    % the normalized directions BA and BC
+    \etr@nvec{b}{a}\etr@nvec{b}{c}
+    % calculate the matrix coefficients
+    \pgfmathsetmacro{\pgf@det}{\the\pgf@xa*\the\pgf@yc-\the\pgf@ya*\the\pgf@xc}
+    \pgfmathsetmacro{\pgf@tmpx}{-\the\pgf@xc/\pgf@det}
+    \pgfmathsetmacro{\pgf@tmpy}{\the\pgf@yc/\pgf@det}
+    % the projection transform
+    \pgfkeysalso{cm={\pgf@tmpy*\the\pgf@xa,\pgf@tmpy*\the\pgf@ya,\pgf@tmpx*\the\pgf@xa,\pgf@tmpx*\the\pgf@ya,(\pgf@xb,\pgf@yb)},shift={(-\pgf@xb,-\pgf@yb)}}%
+  },
+  symmetry/.code args={#1--#2}{
+    % get A--B
+    \etr@get{a}{#1}\etr@get{b}{#2}
+    % the normalized directions AB
+    \etr@nvec{a}{b}
+    % the symmetry transform
+    \pgfkeysalso{cm={2*\pgf@xb*\pgf@xb-1,2*\pgf@xb*\pgf@yb,2*\pgf@xb*\pgf@yb,2*\pgf@yb*\pgf@yb-1,(\pgf@xa,\pgf@ya)},shift={(-\pgf@xa,-\pgf@ya)}}%
+  },
+  slanted symmetry/.code args={#1--#2--#3}{
+    % get A--B--C
+    \etr@get{a}{#1}\etr@get{b}{#2}\etr@get{c}{#3}
+    % the normalized directions BA and BC
+    \etr@nvec{b}{a}\etr@nvec{b}{c}
+    % calculate the matrix coefficients
+    \pgfmathsetmacro{\pgf@det}{\the\pgf@xa*\the\pgf@yc-\the\pgf@ya*\the\pgf@xc}
+    \pgfmathsetmacro{\pgf@tmpx}{-\the\pgf@xc/\pgf@det}
+    \pgfmathsetmacro{\pgf@tmpy}{\the\pgf@yc/\pgf@det}
+    % the projection transform
+    \pgfkeysalso{cm={2*\pgf@tmpy*\the\pgf@xa-1,2*\pgf@tmpy*\the\pgf@ya,2*\pgf@tmpx*\the\pgf@xa,2*\pgf@tmpx*\the\pgf@ya-1,(\pgf@xb,\pgf@yb)},shift={(-\pgf@xb,-\pgf@yb)}}%
+  }
+}
