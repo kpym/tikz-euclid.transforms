@@ -11,28 +11,41 @@
 %
 % ---------------------------
 % translation=A--B
-%   is the translation that with vector AB (<=> sends A to B)
+%   is the translation with vector AB (<=> sends A to B)
 % ---------------------------
 % rotation=A--O--B
 %   is the rotation around O that sens [O,A) to [O,B) (<=> sends O to O and A to B if OA=OB)
 % ---------------------------
 % homothety=A--O--B
-%   is the homothety with center O and ratio OB:OA (<=> sends O to O and A to B if A,O,B aligned)
-% ---------------------------
-% central symmetry=A
-%   is the symmetry with center A (<=> sends A to A)
+%   is the homothety with center O and ratio O(O!B!A):OA (<=> sends O to O and A to B if A,O,B aligned)
 % ---------------------------
 % projection=A--B
 %   is the orthogonal projection to (AB) (<=> sends A to A and B to B)
+%   same as 'orthogonal projection=A--B'
 % ---------------------------
-% slanted projection=A--B--C
+% projection=A--B--C
 %   is the projection to (AB) with direction (BC) (<=> sends A to A,B to B and C to B)
+%   same as 'projection=A--B//B--C' and as 'slanted projection=A--B//B--C'
+% ---------------------------
+% projection=A--B//C--D
+%   is the projection to (AB) with direction (CD)
+%   same as 'slanted projection=A--B//C--D'
+% ---------------------------
+% symmetry=A
+%   is the symmetry with center A (<=> sends A to A)
+%   same as 'central symmetry=A'
 % ---------------------------
 % symmetry=A--B
 %   is the orthogonal symmetry to (AB) (<=> sends A to A and B to B)
+%   same as 'orthogonal symmetry=A--B'
 % ---------------------------
-% slanted symmetry=A--B--C
+% symmetry=A--B--C
 %   is the symmetry with axis (AB) and direction (BC) (<=> sends A to A, B to B and C to (B!-1!C))
+%   same as 'symmetry=A--B//B--C' and as as 'slanted symmetry=A--B//B--C'
+% ---------------------------
+% symmetry=A--B//C--D
+%   is the symmetry with axis (AB) and direction (CD)
+%   same as 'slanted symmetry=A--B//C--D'
 %
 % ===================================================================
 %
@@ -40,8 +53,8 @@
 %
 % you can add this transformations as styles anywhere you can use for example [rotate=20]
 %
-% ([central symmetry=A]B) coordinate(C), will construct C such that A is the middle of BC
-% ([rotation=A--O--B]C) coordinate(D), if C is on (OA) will construct D on OB such that OC=OD
+% `([symmetry=A]B) coordinate(C)`, will construct C such that A is the middle of BC
+% `([rotation=A--O--B]C) coordinate(D)`, if C is on (OA) will construct D on OB such that OC=OD
 %
 % ===================================================================
 
@@ -83,6 +96,76 @@
   \etr@nrmlz{#2}to{#2}
 }
 
+% -------------------------------------------------------------------
+% Parse tools based on private conversation with jfbu
+% -------------------------------------------------------------------
+
+% ---- parse symetry ----
+\def\symmetryone#1\parsesymmetry{\pgfkeysalso{central symmetry/.expanded=#1}}
+\def\symmetrytwo#1--#2\parsesymmetry{\pgfkeysalso{orthogonal symmetry/.expanded=#1--#2}}
+\def\symmetrythree#1--#2--#3\parsesymmetry{\pgfkeysalso{slanted symmetry/.expanded=#1--#2//#2--#3}}
+\def\symmetryfour#1--#2//#3--#4\parsesymmetry{\pgfkeysalso{slanted symmetry/.expanded=#1--#2//#3--#4}}
+
+\def\parsesymmetry#1{\parse@symmetry#1--2--1--0\parse@symmetry{#1}}
+
+\def\parse@symmetry#1--#2--#3--#4#5\parse@symmetry#6{%
+    \ifcase #4
+    \expandafter\symmetryone
+    \or
+    \expandafter\symmetrytwo
+    \or
+    \expandafter\parsedeepersymmetry
+    \else
+    \ERROR
+    \fi #6\parsesymmetry
+}%
+
+\def\parsedeepersymmetry #1--#2--#3\parsesymmetry{%
+    \parse@deepersymmetry #2//\parse@deepersymmetry #1--#2--#3\parsesymmetry
+}%
+
+\def\parse@deepersymmetry #1//#2\parse@deepersymmetry{%
+    \if\relax\detokenize{#2}\relax
+      \expandafter\symmetrythree
+    \else
+      \expandafter\symmetryfour
+    \fi
+}%
+
+% ---- parse projection ----
+\def\projectionone#1\parseprojection{\relax}
+\def\projectiontwo#1--#2\parseprojection{\pgfkeysalso{orthogonal projection/.expanded=#1--#2}}
+\def\projectionthree#1--#2--#3\parseprojection{\pgfkeysalso{slanted projection/.expanded=#1--#2//#2--#3}}
+\def\projectionfour#1--#2//#3--#4\parseprojection{\pgfkeysalso{slanted projection/.expanded=#1--#2//#3--#4}}
+
+\def\parseprojection#1{\parse@projection#1--2--1--0\parse@projection{#1}}
+
+\def\parse@projection#1--#2--#3--#4#5\parse@projection#6{%
+    \ifcase #4
+    \expandafter\projectionone
+    \or
+    \expandafter\projectiontwo
+    \or
+    \expandafter\parsedeeperprojection
+    \else
+    \ERROR
+    \fi #6\parseprojection
+}%
+
+\def\parsedeeperprojection #1--#2--#3\parseprojection{%
+    \parse@deeperprojection #2//\parse@deeperprojection #1--#2--#3\parseprojection
+}%
+
+\def\parse@deeperprojection #1//#2\parse@deeperprojection{%
+    \if\relax\detokenize{#2}\relax
+      \expandafter\projectionthree
+    \else
+      \expandafter\projectionfour
+    \fi
+}%
+
+
+
 % ===================================================================
 % The main transforms as styles
 % ===================================================================
@@ -121,47 +204,53 @@
     % the homothety transform
     \pgfkeysalso{scale around={\pgf@lambda:(#2)}}
   },
+  orthogonal projection/.code args={#1--#2}{
+    % get A--B
+    \etr@get{a}{#1}\etr@get{b}{#2}
+    % the normalized directions AB
+    \etr@nvec{a}{b}
+    % the orthogonal projection transform
+    \pgfkeysalso{cm={\pgf@xb*\pgf@xb,\pgf@xb*\pgf@yb,\pgf@xb*\pgf@yb,\pgf@yb*\pgf@yb,(\pgf@xa,\pgf@ya)},shift={(-\pgf@xa,-\pgf@ya)}}%
+  },
+  slanted projection/.code args={#1--#2//#3--#4}{
+    % get C--D and normalize it (in c)
+    \etr@get{b}{#3}\etr@get{c}{#4}\etr@nvec{b}{c}
+    % get B--A and normalize it (in a, keep B in b)
+    \etr@get{a}{#1}\etr@get{b}{#2}\etr@nvec{b}{a}
+    % calculate the matrix coefficients
+    \pgfmathsetmacro{\pgf@det}{\the\pgf@xa*\the\pgf@yc-\the\pgf@ya*\the\pgf@xc}
+    \pgfmathsetmacro{\pgf@tmpx}{-\the\pgf@xc/\pgf@det}
+    \pgfmathsetmacro{\pgf@tmpy}{\the\pgf@yc/\pgf@det}
+    % the slanted projection transform
+    \pgfkeysalso{cm={\pgf@tmpy*\the\pgf@xa,\pgf@tmpy*\the\pgf@ya,\pgf@tmpx*\the\pgf@xa,\pgf@tmpx*\the\pgf@ya,(\pgf@xb,\pgf@yb)},shift={(-\pgf@xb,-\pgf@yb)}}%
+  },
+  projection/.code={
+    \parseprojection{#1}
+  },
   central symmetry/.style={
     scale around={-1:(#1)}
   },
-  projection/.code args={#1--#2}{
+  orthogonal symmetry/.code args={#1--#2}{
     % get A--B
     \etr@get{a}{#1}\etr@get{b}{#2}
     % the normalized directions AB
     \etr@nvec{a}{b}
-    % the projection transform
-    \pgfkeysalso{cm={\pgf@xb*\pgf@xb,\pgf@xb*\pgf@yb,\pgf@xb*\pgf@yb,\pgf@yb*\pgf@yb,(\pgf@xa,\pgf@ya)},shift={(-\pgf@xa,-\pgf@ya)}}%
-  },
-  slanted projection/.code args={#1--#2--#3}{
-    % get A--B--C
-    \etr@get{a}{#1}\etr@get{b}{#2}\etr@get{c}{#3}
-    % the normalized directions BA and BC
-    \etr@nvec{b}{a}\etr@nvec{b}{c}
-    % calculate the matrix coefficients
-    \pgfmathsetmacro{\pgf@det}{\the\pgf@xa*\the\pgf@yc-\the\pgf@ya*\the\pgf@xc}
-    \pgfmathsetmacro{\pgf@tmpx}{-\the\pgf@xc/\pgf@det}
-    \pgfmathsetmacro{\pgf@tmpy}{\the\pgf@yc/\pgf@det}
-    % the projection transform
-    \pgfkeysalso{cm={\pgf@tmpy*\the\pgf@xa,\pgf@tmpy*\the\pgf@ya,\pgf@tmpx*\the\pgf@xa,\pgf@tmpx*\the\pgf@ya,(\pgf@xb,\pgf@yb)},shift={(-\pgf@xb,-\pgf@yb)}}%
-  },
-  symmetry/.code args={#1--#2}{
-    % get A--B
-    \etr@get{a}{#1}\etr@get{b}{#2}
-    % the normalized directions AB
-    \etr@nvec{a}{b}
-    % the symmetry transform
+    % the orthogonal symmetry transform
     \pgfkeysalso{cm={2*\pgf@xb*\pgf@xb-1,2*\pgf@xb*\pgf@yb,2*\pgf@xb*\pgf@yb,2*\pgf@yb*\pgf@yb-1,(\pgf@xa,\pgf@ya)},shift={(-\pgf@xa,-\pgf@ya)}}%
   },
-  slanted symmetry/.code args={#1--#2--#3}{
-    % get A--B--C
-    \etr@get{a}{#1}\etr@get{b}{#2}\etr@get{c}{#3}
-    % the normalized directions BA and BC
-    \etr@nvec{b}{a}\etr@nvec{b}{c}
+  slanted symmetry/.code args={#1--#2//#3--#4}{
+    % get C--D and normalize it (in c)
+    \etr@get{b}{#3}\etr@get{c}{#4}\etr@nvec{b}{c}
+    % get B--A and normalize it (in a, keep B in b)
+    \etr@get{a}{#1}\etr@get{b}{#2}\etr@nvec{b}{a}
     % calculate the matrix coefficients
     \pgfmathsetmacro{\pgf@det}{\the\pgf@xa*\the\pgf@yc-\the\pgf@ya*\the\pgf@xc}
     \pgfmathsetmacro{\pgf@tmpx}{-\the\pgf@xc/\pgf@det}
     \pgfmathsetmacro{\pgf@tmpy}{\the\pgf@yc/\pgf@det}
-    % the projection transform
+    % the slanted symmetry transform
     \pgfkeysalso{cm={2*\pgf@tmpy*\the\pgf@xa-1,2*\pgf@tmpy*\the\pgf@ya,2*\pgf@tmpx*\the\pgf@xa,2*\pgf@tmpx*\the\pgf@ya-1,(\pgf@xb,\pgf@yb)},shift={(-\pgf@xb,-\pgf@yb)}}%
+  },
+  symmetry/.code={
+    \parsesymmetry{#1}
   }
 }
