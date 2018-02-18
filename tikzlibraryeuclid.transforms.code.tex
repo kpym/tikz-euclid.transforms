@@ -17,7 +17,11 @@
 %   is the rotation around O that sens [O,A) to [O,B) (<=> sends O to O and A to B if OA=OB)
 % ---------------------------
 % homothety=A--O--B
-%   is the homothety with center O and ratio O(O!B!A):OA (<=> sends O to O and A to B if A,O,B aligned)
+%   it is the homothety with ratio OB:OA (<=> sends O to O, A to B iff [O,A)=[O,B))
+% ---------------------------
+% similarity=A--O--B
+%   is the composition of <rotation=A--O--B> and <homothety=A--O--B>
+%   it can be used as negative homothety if [O,A)=-[O,B)
 % ---------------------------
 % projection=A--B
 %   is the orthogonal projection to (AB) (<=> sends A to A and B to B)
@@ -77,8 +81,8 @@
 % Set (\pgf@x#1,\pgf@y#1) := (#2)
 % ------------------------------
 \def\etr@get#1#2{
-  %\tikz@scan@one@point\pgfutil@firstofone(#2)\relax
-  \pgf@process{\pgfpointanchor{#2}{center}}%
+  %\pgf@process{\pgfpointanchor{#2}{center}}%
+  \tikz@scan@one@point\pgfutil@firstofone(#2)\relax
   \csname pgf@x#1\endcsname=\pgf@x%
   \csname pgf@y#1\endcsname=\pgf@y%
 }
@@ -111,7 +115,22 @@
   \pgfmathsetlength{\csname pgf@x#2\endcsname}{.0351459999986\csname pgf@x#2\endcsname}
   \pgfmathsetlength{\csname pgf@y#2\endcsname}{.0351459999986\csname pgf@y#2\endcsname}
 }
-
+% Set the matrix transform
+% ------------------------------
+\newdimen\etr@dx
+\newdimen\etr@dy
+\def\etr@transform#1#2#3#4#5#6{
+  \pgfmathsetmacro{\pgf@cma}{#1}
+  \pgfmathsetmacro{\pgf@cmb}{#2}
+  \pgfmathsetmacro{\pgf@cmc}{#3}
+  \pgfmathsetmacro{\pgf@cmd}{#4}
+  \pgfmathsetlength{\etr@dx}{#5}
+  \pgfmathsetlength{\etr@dy}{#6}
+  \pgftransformcm{\pgf@cma}{\pgf@cmb}{\pgf@cmc}{\pgf@cmd}{\pgfpoint{\etr@dx}{\etr@dy}}
+  \pgfmathsetlength{\etr@dx}{-\etr@dx}
+  \pgfmathsetlength{\etr@dy}{-\etr@dy}
+  \pgftransformcm{1}{0}{0}{1}{\pgfpoint{\etr@dx}{\etr@dy}}
+}
 % -------------------------------------------------------------------
 % Parse tools based on private conversation with jfbu
 % -------------------------------------------------------------------
@@ -205,7 +224,7 @@
     \let\pgf@anglea=\pgfmathresult%
     \pgfmathatantwo{\the\pgf@yc}{\the\pgf@xc}%
     \let\pgf@anglec=\pgfmathresult%
-    % the homothety transform
+    % the rotation transform
     \pgfkeysalso{rotate around={\pgf@anglec-\pgf@anglea:(#2)}}
   },
   homothety/.code args={#1--#2--#3}{
@@ -213,10 +232,25 @@
     \etr@get{a}{#1}\etr@get{b}{#2}\etr@get{c}{#3}
     % the directions BA and BC
     \etr@vec{b}{a}\etr@vec{b}{c}
-    % normalised vector of BA is (\pgf@xb,\pgf@yb)
-    \etr@nrmlz{a}to{b}
     % calculate the homothety ratio
-    \pgfmathsetmacro{\pgf@lambda}{(\the\pgf@xc*\the\pgf@xb+\the\pgf@yc*\the\pgf@yb)/veclen(\the\pgf@xa,\the\pgf@ya)}
+    \pgfmathsetmacro{\pgf@lambda}{veclen(\the\pgf@xc,\the\pgf@yc)/veclen(\the\pgf@xa,\the\pgf@ya)}
+    % the homothety transform
+    \pgfkeysalso{scale around={\pgf@lambda:(#2)}}
+  },
+  similarity/.code args={#1--#2--#3}{
+    % get A--B--C
+    \etr@get{a}{#1}\etr@get{b}{#2}\etr@get{c}{#3}
+    % the directions BA and BC
+    \etr@vec{b}{a}\etr@vec{b}{c}
+    % get the arguments of BA and BC
+    \pgfmathatantwo{\the\pgf@ya}{\the\pgf@xa}%
+    \let\pgf@anglea=\pgfmathresult%
+    \pgfmathatantwo{\the\pgf@yc}{\the\pgf@xc}%
+    \let\pgf@anglec=\pgfmathresult%
+    % the rotation transform
+    \pgfkeysalso{rotate around={\pgf@anglec-\pgf@anglea:(#2)}}
+    % calculate the homothety ratio
+    \pgfmathsetmacro{\pgf@lambda}{veclen(\the\pgf@xc,\the\pgf@yc)/veclen(\the\pgf@xa,\the\pgf@ya)}
     % the homothety transform
     \pgfkeysalso{scale around={\pgf@lambda:(#2)}}
   },
@@ -230,7 +264,7 @@
     \pgfmathsetmacro{\pgf@tmpxy}{\pgf@sys@tonumber\pgf@xb\pgf@yb}
     \pgfmathsetmacro{\pgf@tmpyy}{\pgf@sys@tonumber\pgf@yb\pgf@yb}
     % the orthogonal projection transform
-    \pgfkeysalso{cm={\pgf@tmpxx,\pgf@tmpxy,\pgf@tmpxy,\pgf@tmpyy,(\pgf@xa,\pgf@ya)},shift={(-\pgf@xa,-\pgf@ya)}}%
+    \etr@transform{\pgf@tmpxx}{\pgf@tmpxy}{\pgf@tmpxy}{\pgf@tmpyy}{\pgf@xa}{\pgf@ya}
   },
   slanted projection/.code args={#1--#2//#3--#4}{
     % get C--D and normalize it (in c)
@@ -242,7 +276,7 @@
     \pgfmathsetmacro{\pgf@tmpx}{-\pgf@sys@tonumber{\pgf@xc}/\pgf@det}
     \pgfmathsetmacro{\pgf@tmpy}{\pgf@sys@tonumber{\pgf@yc}/\pgf@det}
     % the slanted projection transform
-    \pgfkeysalso{cm={\pgf@tmpy*\pgf@sys@tonumber{\pgf@xa},\pgf@tmpy*\pgf@sys@tonumber{\pgf@ya},\pgf@tmpx*\pgf@sys@tonumber{\pgf@xa},\pgf@tmpx*\pgf@sys@tonumber{\pgf@ya},(\pgf@xb,\pgf@yb)},shift={(-\pgf@xb,-\pgf@yb)}}%
+    \etr@transform{\pgf@tmpy\pgf@xa}{\pgf@tmpy\pgf@ya}{\pgf@tmpx\pgf@xa}{\pgf@tmpx\pgf@ya}{\pgf@xb}{\pgf@yb}%
   },
   projection/.code={
     \parseprojection{#1}
@@ -260,7 +294,7 @@
     \pgfmathsetmacro{\pgf@tmpxy}{2*\pgf@sys@tonumber\pgf@xb\pgf@yb}
     \pgfmathsetmacro{\pgf@tmpyy}{2*\pgf@sys@tonumber\pgf@yb\pgf@yb-1}
     % the orthogonal symmetry transform
-    \pgfkeysalso{cm={\pgf@tmpxx,\pgf@tmpxy,\pgf@tmpxy,\pgf@tmpyy,(\pgf@xa,\pgf@ya)},shift={(-\pgf@xa,-\pgf@ya)}}%
+    \etr@transform{\pgf@tmpxx}{\pgf@tmpxy}{\pgf@tmpxy}{\pgf@tmpyy}{\pgf@xa}{\pgf@ya}%
   },
   slanted symmetry/.code args={#1--#2//#3--#4}{
     % get C--D and normalize it (in c)
@@ -272,7 +306,7 @@
     \pgfmathsetmacro{\pgf@tmpx}{-2*\pgf@sys@tonumber{\pgf@xc}/\pgf@det}
     \pgfmathsetmacro{\pgf@tmpy}{2*\pgf@sys@tonumber{\pgf@yc}/\pgf@det}
     % the slanted symmetry transform
-    \pgfkeysalso{cm={\pgf@tmpy*\pgf@sys@tonumber{\pgf@xa}-1,\pgf@tmpy*\pgf@sys@tonumber{\pgf@ya},\pgf@tmpx*\pgf@sys@tonumber{\pgf@xa},\pgf@tmpx*\pgf@sys@tonumber{\pgf@ya}-1,(\pgf@xb,\pgf@yb)},shift={(-\pgf@xb,-\pgf@yb)}}%
+    \etr@transform{\pgf@tmpy\pgf@xa-1}{\pgf@tmpy\pgf@ya}{\pgf@tmpx\pgf@xa}{\pgf@tmpx\pgf@ya-1}{\pgf@xb}{\pgf@yb}
   },
   symmetry/.code={
     \parsesymmetry{#1}
@@ -283,7 +317,7 @@
     % get BA and BC
     \etr@cmvec{b}{a}\etr@cmvec{b}{c}
     % to base transform
-    \pgfkeysalso{cm={\pgf@sys@tonumber{\pgf@xa},\pgf@sys@tonumber{\pgf@ya},\pgf@sys@tonumber{\pgf@xc},\pgf@sys@tonumber{\pgf@yc},(\pgf@xb,\pgf@yb)}}%
+    \pgftransformcm{\pgf@sys@tonumber\pgf@xa}{\pgf@sys@tonumber\pgf@ya}{\pgf@sys@tonumber\pgf@xc}{\pgf@sys@tonumber\pgf@yc}{\pgfpoint{\pgf@xb}{\pgf@yb}}
   },
   from base/.code args={#1--#2--#3}{
     % get C--D and normalize it (in c)
@@ -293,6 +327,6 @@
     % get the determinant
     \pgfmathsetmacro{\pgf@det}{\pgf@sys@tonumber\pgf@xa\pgf@yc-\pgf@sys@tonumber\pgf@ya\pgf@xc}
     % to base transform
-    \pgfkeysalso{cm={\pgf@sys@tonumber{\pgf@yc}/\pgf@det,-\pgf@sys@tonumber{\pgf@ya}/\pgf@det,-\pgf@sys@tonumber{\pgf@xc}/\pgf@det,\pgf@sys@tonumber{\pgf@xa}/\pgf@det,(0,0)},shift={(-\pgf@xb,-\pgf@yb)}}%
+    \pgfkeysalso{cm={\pgf@sys@tonumber\pgf@yc/\pgf@det,-\pgf@sys@tonumber\pgf@ya/\pgf@det,-\pgf@sys@tonumber\pgf@xc/\pgf@det,\pgf@sys@tonumber\pgf@xa/\pgf@det,(0,0)},shift={(-\pgf@xb,-\pgf@yb)}}%
   }
 }
