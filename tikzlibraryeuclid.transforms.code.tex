@@ -78,11 +78,67 @@
 % Some tools
 % ===================================================================
 
+% Patch two tikz internal commands :
+% - \tikz@scan@handle@options
+% - \tikz@parse@node
+% to make transforms stable and usable inside point definitions like ([<transform>]...)
+% ------------------------------
+% \ifetr@insidecoords is set to true at the begining of ([<transform>]...), and to false at the end
+% when true \etr@transformbeforereset contain the "outside" transform
+% it is used to prevent a double transform of named coordinates
+% ------------------------------
+\newif\ifetr@insidecoords\etr@insidecoordsfalse%
+\def\tikz@scan@handle@options#1{%
+  \etr@insidecoordstrue% <------------------------------------------- this 3 lines are new
+  \pgfgettransform\etr@transformbeforereset% <----------------------- save the transform before reset inside ([]...)
+  \global\let\etr@transformbeforereset\etr@transformbeforereset% <--- and make it accessible ouside the scope
+  {%
+    % Ok, compute point with options set and zero transformation
+    % matrix:
+    \pgftransformreset%
+    \let\tikz@transform=\pgfutil@empty%
+    \expandafter\tikzset\expandafter{\tikz@scan@point@options}%
+    \tikz@transform%
+    \pgf@process{\pgfpointtransformed{#1}}%
+    \xdef\tikz@marshal{\expandafter\noexpand\tikz@scan@point@recall{\noexpand\pgfqpoint{\the\pgf@x}{\the\pgf@y}}}%
+  }%
+  \etr@insidecoordsfalse % <---------------------------------------- this line is new
+  \tikz@marshal%
+}
+% ------------------------------
+% \ifetr@wasnode is set to true if the parsed coordinate in \etr@get was a named coordinate
+% ------------------------------
+\newif\ifetr@wasnode\etr@wasnodefalse
+\def\tikz@parse@node#1(#2){%
+    \etr@wasnodetrue % <-------------------------------------------- new line
+    \pgfutil@in@.{#2}%
+    \ifpgfutil@in@
+        \tikz@calc@anchor#2\tikz@stop%
+    \else%
+        \tikz@calc@anchor#2.center\tikz@stop%
+        \expandafter\ifx\csname pgf@sh@ns@#2\endcsname\tikz@coordinate@text%
+        \else
+            \tikz@shapebordertrue%
+            \def\tikz@shapeborder@name{#2}%
+        \fi%
+    \fi%
+    \edef\tikz@marshal{\noexpand#1{\noexpand\pgfqpoint{\the\pgf@x}{\the\pgf@y}}}%
+    \tikz@marshal%
+}
 % Set (\pgf@x#1,\pgf@y#1) := (#2)
+% When the transform is useed inside point definition ([<transform>]...)
+% the named coordinates are reversed back to local ones to prevent "double" transforms
 % ------------------------------
 \def\etr@get#1#2{
-  %\pgf@process{\pgfpointanchor{#2}{center}}%
-  \tikz@scan@one@point\pgfutil@firstofone(#2)\relax
+  \etr@wasnodefalse
+  \tikz@scan@one@point\pgfutil@firstofone(#2)\relax% \pgf@process{\pgfpointanchor{#2}{center}}?
+  \ifetr@insidecoords\ifetr@wasnode
+    {% named coordinate inside ([<transform>]...)
+        \pgfsettransform\etr@transformbeforereset%
+        \pgftransforminvert%
+        \pgf@process{\pgfpointtransformed{\pgfqpoint{\the\pgf@x}{\the\pgf@y}}}%
+    }%
+  \fi\fi
   \csname pgf@x#1\endcsname=\pgf@x%
   \csname pgf@y#1\endcsname=\pgf@y%
 }
@@ -225,7 +281,7 @@
     \pgfmathatantwo{\the\pgf@yc}{\the\pgf@xc}%
     \let\pgf@anglec=\pgfmathresult%
     % the rotation transform
-    \pgfkeysalso{rotate around={\pgf@anglec-\pgf@anglea:(#2)}}
+    \pgfkeysalso{rotate around={\pgf@anglec-\pgf@anglea:(\pgf@xb,\pgf@yb)}}
   },
   homothety/.code args={#1--#2--#3}{
     % get A--B--C
@@ -235,7 +291,7 @@
     % calculate the homothety ratio
     \pgfmathsetmacro{\pgf@lambda}{veclen(\the\pgf@xc,\the\pgf@yc)/veclen(\the\pgf@xa,\the\pgf@ya)}
     % the homothety transform
-    \pgfkeysalso{scale around={\pgf@lambda:(#2)}}
+    \pgfkeysalso{scale around={\pgf@lambda:(\pgf@xb,\pgf@yb)}}
   },
   similarity/.code args={#1--#2--#3}{
     % get A--B--C
@@ -248,11 +304,11 @@
     \pgfmathatantwo{\the\pgf@yc}{\the\pgf@xc}%
     \let\pgf@anglec=\pgfmathresult%
     % the rotation transform
-    \pgfkeysalso{rotate around={\pgf@anglec-\pgf@anglea:(#2)}}
+    \pgfkeysalso{rotate around={\pgf@anglec-\pgf@anglea:(\pgf@xb,\pgf@yb)}}
     % calculate the homothety ratio
     \pgfmathsetmacro{\pgf@lambda}{veclen(\the\pgf@xc,\the\pgf@yc)/veclen(\the\pgf@xa,\the\pgf@ya)}
     % the homothety transform
-    \pgfkeysalso{scale around={\pgf@lambda:(#2)}}
+    \pgfkeysalso{scale around={\pgf@lambda:(\pgf@xb,\pgf@yb)}}
   },
   orthogonal projection/.code args={#1--#2}{
     % get A--B
@@ -281,8 +337,10 @@
   projection/.code={
     \parseprojection{#1}
   },
-  central symmetry/.style={
-    scale around={-1:(#1)}
+  central symmetry/.code={
+    % get A--B
+    \etr@get{a}{#1}
+    \pgfkeysalso{scale around={-1:(\pgf@xa,\pgf@ya)}}
   },
   orthogonal symmetry/.code args={#1--#2}{
     % get A--B
